@@ -1,12 +1,13 @@
 <template>
   <main class="min-h-screen bg-white text-slate-900">
     <div class="mx-auto flex min-h-screen max-w-[1400px] flex-col px-4 pb-12 pt-6 sm:px-8">
-      <header class="flex flex-wrap items-center justify-between gap-4">
+      <header class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 bg-white/95 py-4 backdrop-blur">
         <div class="flex flex-wrap items-center gap-2">
           <button
             class="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-900 transition hover:bg-slate-50"
             type="button"
             aria-label="Add contact"
+            title="Add"
             @click="openModal"
           >
             <PlusIcon class="h-5 w-5" />
@@ -15,28 +16,31 @@
             class="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 transition hover:bg-slate-50"
             type="button"
             aria-label="Import contacts"
+            title="Import"
             @click="openImportModal"
-          >
-            <ArrowUpTrayIcon class="h-5 w-5" />
-          </button>
-          <button
-            class="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 transition hover:bg-slate-50"
-            type="button"
-            aria-label="Export contacts"
-            @click="openExportModal"
           >
             <ArrowDownTrayIcon class="h-5 w-5" />
           </button>
           <button
             class="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 transition hover:bg-slate-50"
             type="button"
+            aria-label="Export contacts"
+            title="Export"
+            @click="openExportModal"
+          >
+            <ArrowUpTrayIcon class="h-5 w-5" />
+          </button>
+          <button
+            class="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-900 transition hover:bg-slate-50"
+            type="button"
             aria-label="Settings"
+            title="Settings"
             @click="openSettingsModal"
           >
             <Cog6ToothIcon class="h-5 w-5" />
           </button>
         </div>
-        <div class="text-xs font-semibold text-slate-500">Contacts</div>
+        <div class="text-xs font-semibold text-slate-500">{{ contacts.length }} Contacts</div>
         <div class="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
           <label class="relative w-full sm:w-72 md:w-96">
             <span class="sr-only">Search contacts</span>
@@ -48,9 +52,6 @@
               placeholder="Search all fields"
             />
           </label>
-          <div class="text-xs text-slate-400">
-            {{ contacts.length }}
-          </div>
         </div>
       </header>
 
@@ -103,90 +104,112 @@
     <ContactModal
       :open="isModalOpen"
       :contact="selectedContact"
+      :columns="columns"
       @close="closeModal"
       @save="saveContact"
       @delete="deleteContact"
     />
 
-    <div v-if="isImportOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-8">
-      <div class="absolute inset-0 bg-white/80" @click="closeImportModal"></div>
-      <div class="relative flex w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
-        <div class="flex items-center justify-between">
-          <div class="text-xs font-semibold text-slate-500">Import contacts</div>
-          <button class="text-slate-400 transition hover:text-slate-700" type="button" @click="closeImportModal">✕</button>
+    <BaseModal
+      :open="isImportOpen"
+      title="Import contacts"
+      max-width-class="max-w-4xl"
+      @close="closeImportModal"
+    >
+      <div class="space-y-6">
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">File</div>
+          <input
+            class="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700"
+            type="file"
+            accept=".json,.csv,application/json,text/csv"
+            @change="handleImportFile"
+          />
+          <div v-if="importFileName" class="mt-2 text-xs text-slate-400">{{ importFileName }}</div>
+          <div v-if="importError" class="mt-2 text-xs text-rose-500">{{ importError }}</div>
         </div>
-        <div class="mt-6 flex-1 space-y-6 overflow-y-auto pr-2">
-          <div>
-            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">File</div>
-            <input
-              class="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700"
-              type="file"
-              accept=".json,.csv,application/json,text/csv"
-              @change="handleImportFile"
-            />
-            <div v-if="importFileName" class="mt-2 text-xs text-slate-400">{{ importFileName }}</div>
-            <div v-if="importError" class="mt-2 text-xs text-rose-500">{{ importError }}</div>
-          </div>
 
-          <div v-if="importColumns.length">
+        <div v-if="importColumns.length">
+          <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Column mapping</div>
-            <div class="mt-3 space-y-3">
-              <div
-                v-for="mapping in importColumnMappings"
-                :key="mapping.importKey"
-                class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3"
+            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span class="uppercase tracking-[0.2em] text-slate-400">Default</span>
+              <select
+                v-model="importFieldDefault"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
               >
-                <div class="grid gap-3 sm:grid-cols-[1fr,220px] sm:items-center">
-                  <div class="text-sm font-medium text-slate-700">{{ mapping.importKey }}</div>
-                  <select
-                    v-model="mapping.targetKey"
-                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  >
-                    <option value="">Skip</option>
-                    <option value="__new__">New column</option>
-                    <option v-for="column in columns" :key="column.key" :value="column.key">
-                      {{ column.label }}
-                    </option>
-                  </select>
-                </div>
-                <div v-if="mapping.targetKey === '__new__'" class="mt-3 grid gap-3 sm:grid-cols-2">
-                  <input
-                    v-model="mapping.newLabel"
-                    class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    type="text"
-                    placeholder="New column label"
-                  />
-                  <input
-                    v-model="mapping.newKey"
-                    class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    type="text"
-                    placeholder="New column key"
-                  />
-                </div>
-              </div>
+                <option value="new">Add as new</option>
+                <option value="skip">Skip</option>
+              </select>
+              <button
+                class="rounded-full border border-slate-200 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-500 transition hover:text-slate-700"
+                type="button"
+                @click="applyImportDefault(true)"
+              >
+                Apply to all
+              </button>
             </div>
           </div>
-
-          <div v-if="importRows.length">
-            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Row mapping</div>
-            <div class="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-100">
-              <div v-for="(row, index) in importRows" :key="index" class="flex items-center gap-3 px-4 py-3">
-                <div class="flex-1 text-sm text-slate-700">{{ importRowLabel(row, index) }}</div>
+          <div class="mt-3 space-y-3">
+            <div
+              v-for="mapping in importColumnMappings"
+              :key="mapping.importKey"
+              class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3"
+            >
+              <div class="grid gap-3 sm:grid-cols-[1fr,220px] sm:items-center">
+                <div class="text-sm font-medium text-slate-700">{{ mapping.importKey }}</div>
                 <select
-                  v-model="importRowTargets[index]"
-                  class="w-48 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  v-model="mapping.targetKey"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
-                  <option value="new">Add as new</option>
-                  <option value="skip">Skip</option>
-                  <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
-                    {{ contactLabel(contact) }}
+                  <option value="">Skip</option>
+                  <option value="__new__">New column</option>
+                  <option v-for="column in columns" :key="column.key" :value="column.key">
+                    {{ column.label }}
+                  </option>
+                </select>
+              </div>
+              <div v-if="mapping.targetKey === '__new__'" class="mt-3 grid gap-3 sm:grid-cols-2">
+                <input
+                  v-model="mapping.newLabel"
+                  class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  type="text"
+                  placeholder="New column label"
+                />
+                <select
+                  v-model="mapping.newType"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option v-for="fieldType in fieldTypes" :key="fieldType.value" :value="fieldType.value">
+                    {{ fieldType.label }}
                   </option>
                 </select>
               </div>
             </div>
           </div>
         </div>
-        <div class="mt-6 flex items-center justify-between gap-4">
+
+        <div v-if="importRows.length">
+          <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Row mapping</div>
+          <div class="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-2xl border border-slate-100">
+            <div v-for="(row, index) in importRows" :key="index" class="flex items-center gap-3 px-4 py-3">
+              <div class="flex-1 text-sm text-slate-700">{{ importRowLabel(row, index) }}</div>
+              <select
+                v-model="importRowTargets[index]"
+                class="w-48 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="new">Add as new</option>
+                <option value="skip">Skip</option>
+                <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
+                  {{ contactLabel(contact) }}
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex items-center justify-between gap-4">
           <div class="text-[11px] uppercase tracking-[0.2em] text-slate-400">
             {{ importRows.length ? `${ importRows.length } rows ready` : "Select a file to continue" }}
           </div>
@@ -208,35 +231,35 @@
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </BaseModal>
 
-    <div v-if="isExportOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-8">
-      <div class="absolute inset-0 bg-white/80" @click="closeExportModal"></div>
-      <div class="relative flex w-full max-w-xl max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
-        <div class="flex items-center justify-between">
-          <div class="text-xs font-semibold text-slate-500">Export contacts</div>
-          <button class="text-slate-400 transition hover:text-slate-700" type="button" @click="closeExportModal">✕</button>
+    <BaseModal
+      :open="isExportOpen"
+      title="Export contacts"
+      max-width-class="max-w-xl"
+      @close="closeExportModal"
+    >
+      <div class="space-y-4">
+        <div class="grid gap-3 sm:grid-cols-[140px,1fr] sm:items-center">
+          <label class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Format</label>
+          <select v-model="exportFormat" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+          </select>
         </div>
-        <div class="mt-6 flex-1 space-y-4 overflow-y-auto pr-2">
-          <div class="grid gap-3 sm:grid-cols-[140px,1fr] sm:items-center">
-            <label class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Format</label>
-            <select v-model="exportFormat" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-              <option value="csv">CSV</option>
-              <option value="json">JSON</option>
-            </select>
-          </div>
-          <div class="grid gap-3 sm:grid-cols-[140px,1fr] sm:items-center">
-            <label class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Filename</label>
-            <input
-              v-model="exportFileName"
-              class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              type="text"
-              placeholder="contacts"
-            />
-          </div>
+        <div class="grid gap-3 sm:grid-cols-[140px,1fr] sm:items-center">
+          <label class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Filename</label>
+          <input
+            v-model="exportFileName"
+            class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            type="text"
+            placeholder="contacts"
+          />
         </div>
-        <div class="mt-6 flex items-center justify-between gap-4">
+      </div>
+      <template #footer>
+        <div class="flex items-center justify-between gap-4">
           <div class="text-[11px] uppercase tracking-[0.2em] text-slate-400">
             {{ contacts.length }} contacts
           </div>
@@ -257,89 +280,111 @@
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </BaseModal>
 
-    <div v-if="isSettingsOpen" class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-8">
-      <div class="absolute inset-0 bg-white/80" @click="closeSettingsModal"></div>
-      <div class="relative flex w-full max-w-3xl max-h-[90vh] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl">
-        <div class="flex items-center justify-between">
-          <div class="text-xs font-semibold text-slate-500">Table settings</div>
-          <button class="text-slate-400 transition hover:text-slate-700" type="button" @click="closeSettingsModal">✕</button>
-        </div>
-        <div class="mt-6 flex-1 space-y-6 overflow-y-auto pr-2">
-          <div>
-            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Columns</div>
-            <div class="mt-3 space-y-2">
-              <div
-                v-for="(column, index) in columns"
-                :key="column.key"
-                class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 px-3 py-2"
+    <BaseModal
+      :open="isSettingsOpen"
+      title="Table settings"
+      max-width-class="max-w-3xl"
+      @close="closeSettingsModal"
+    >
+      <div class="space-y-6">
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Columns</div>
+          <div class="mt-3 space-y-2">
+            <div
+              v-for="(column, index) in columns"
+              :key="column.key"
+              class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 px-3 py-2"
+              :class="draggingOverIndex === index ? 'border-slate-300 bg-white shadow-sm' : ''"
+              @dragover.prevent="handleColumnDragOver(index)"
+              @drop="handleColumnDrop(index)"
+            >
+              <button
+                class="-ml-2 inline-flex items-center justify-center px-1 text-slate-400 transition hover:text-slate-700"
+                type="button"
+                aria-label="Drag to reorder column"
+                draggable="true"
+                @dragstart="startColumnDrag(index, $event)"
+                @dragend="endColumnDrag"
               >
-                <input
-                  v-model="column.label"
-                  class="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  type="text"
-                />
-                <div class="text-xs text-slate-400">{{ column.key }}</div>
-                <div class="flex items-center gap-2">
-                  <button
-                    class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-800"
-                    type="button"
-                    aria-label="Move column up"
-                    @click="moveColumn(index, -1)"
-                  >
-                    <ChevronUpIcon class="h-4 w-4" />
-                  </button>
-                  <button
-                    class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-800"
-                    type="button"
-                    aria-label="Move column down"
-                    @click="moveColumn(index, 1)"
-                  >
-                    <ChevronDownIcon class="h-4 w-4" />
-                  </button>
-                  <button
-                    class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-500 transition hover:text-rose-700"
-                    type="button"
-                    aria-label="Remove column"
-                    @click="removeColumn(index)"
-                  >
-                    <XMarkIcon class="h-4 w-4" />
-                  </button>
-                </div>
+                <EllipsisVerticalIcon class="h-5 w-5" />
+              </button>
+              <input
+                v-model="column.label"
+                class="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                type="text"
+              />
+              <select
+                v-model="column.type"
+                class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option v-for="fieldType in fieldTypes" :key="fieldType.value" :value="fieldType.value">
+                  {{ fieldType.label }}
+                </option>
+              </select>
+              <div class="flex items-center gap-2">
+                <button
+                  class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-800"
+                  type="button"
+                  aria-label="Move column up"
+                  @click="moveColumn(index, -1)"
+                >
+                  <ChevronUpIcon class="h-4 w-4" />
+                </button>
+                <button
+                  class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-800"
+                  type="button"
+                  aria-label="Move column down"
+                  @click="moveColumn(index, 1)"
+                >
+                  <ChevronDownIcon class="h-4 w-4" />
+                </button>
+                <button
+                  class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-500 transition hover:text-rose-700"
+                  type="button"
+                  aria-label="Remove column"
+                  @click="removeColumn(index)"
+                >
+                  <XMarkIcon class="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>
+        </div>
 
-          <div>
-            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Add column</div>
-            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-              <input
-                v-model="newColumnLabel"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                type="text"
-                placeholder="Column label"
-              />
-              <input
-                v-model="newColumnKey"
-                class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                type="text"
-                placeholder="Column key"
-              />
-            </div>
-            <div class="mt-3 flex justify-end">
-              <button
-                class="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white transition hover:-translate-y-0.5"
-                type="button"
-                @click="addColumn"
-              >
-                Add column
-              </button>
-            </div>
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Add column</div>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <input
+              v-model="newColumnLabel"
+              class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              type="text"
+              placeholder="Column label"
+            />
+            <select
+              v-model="newColumnType"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option v-for="fieldType in fieldTypes" :key="fieldType.value" :value="fieldType.value">
+                {{ fieldType.label }}
+              </option>
+            </select>
+          </div>
+          <div class="mt-3 flex justify-end">
+            <button
+              class="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white transition hover:-translate-y-0.5"
+              type="button"
+              @click="addColumn"
+            >
+              Add column
+            </button>
           </div>
         </div>
-        <div class="mt-6 flex justify-end">
+      </div>
+      <template #footer>
+        <div class="flex justify-end">
           <button
             class="inline-flex items-center justify-center rounded-full border border-slate-200 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600 transition hover:-translate-y-0.5"
             type="button"
@@ -348,8 +393,8 @@
             Done
           </button>
         </div>
-      </div>
-    </div>
+      </template>
+    </BaseModal>
   </main>
 </template>
 
@@ -360,25 +405,27 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   Cog6ToothIcon,
+  EllipsisVerticalIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   XMarkIcon,
 } from "@heroicons/vue/24/outline";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import BaseModal from "../components/BaseModal.vue";
 import ContactModal from "../components/ContactModal.vue";
 
 const columns = ref( [
-  createColumn( { key: "first_name", label: "First" } ),
-  createColumn( { key: "last_name", label: "Last" } ),
-  createColumn( { key: "email", label: "Email" } ),
-  createColumn( { key: "phone", label: "Phone" } ),
-  createColumn( { key: "address.line1", label: "Addr 1" } ),
-  createColumn( { key: "address.line2", label: "Addr 2" } ),
-  createColumn( { key: "address.city", label: "City" } ),
-  createColumn( { key: "address.state", label: "State" } ),
-  createColumn( { key: "address.postal_code", label: "Postal" } ),
-  createColumn( { key: "address.country", label: "Country" } ),
-  createColumn( { key: "notes", label: "Notes", cellClass: "max-w-[260px] truncate" } ),
+  createColumn( { key: "first_name", label: "First", type: "text" } ),
+  createColumn( { key: "last_name", label: "Last", type: "text" } ),
+  createColumn( { key: "email", label: "Email", type: "email" } ),
+  createColumn( { key: "phone", label: "Phone", type: "phone" } ),
+  createColumn( { key: "line1", label: "Addr 1", type: "text", fullWidth: true } ),
+  createColumn( { key: "line2", label: "Addr 2", type: "text", fullWidth: true } ),
+  createColumn( { key: "city", label: "City", type: "text" } ),
+  createColumn( { key: "state", label: "State", type: "state" } ),
+  createColumn( { key: "postal_code", label: "Postal", type: "zip" } ),
+  createColumn( { key: "country", label: "Country", type: "text" } ),
+  createColumn( { key: "notes", label: "Notes", type: "textarea", cellClass: "max-w-[260px] truncate" } ),
 ] );
 
 const contacts = ref( [] );
@@ -395,20 +442,106 @@ const importRows = ref( [] );
 const importColumns = ref( [] );
 const importColumnMappings = ref( [] );
 const importRowTargets = ref( [] );
+const importFieldDefault = ref( "new" );
 const exportFormat = ref( "csv" );
 const exportFileName = ref( "contacts" );
+const draggingColumnIndex = ref( null );
+const draggingOverIndex = ref( null );
+const fieldTypes = [
+  { value: "text", label: "Text" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+  { value: "state", label: "State" },
+  { value: "zip", label: "Zip" },
+  { value: "number", label: "Number" },
+  { value: "boolean", label: "Boolean" },
+  { value: "textarea", label: "Long text" },
+];
 const newColumnLabel = ref( "" );
-const newColumnKey = ref( "" );
+const newColumnType = ref( "text" );
 const searchQuery = ref( "" );
-const topLevelFields = new Set( [ "first_name", "last_name", "email", "phone", "notes", "address" ] );
+let hasLoadedColumns = false;
+let persistColumnsTimer = null;
 
-function createColumn( { key, label, cellClass } ) {
+function createColumn( { key, label, cellClass, type = "text", fullWidth = false } ) {
   return {
     key,
     label,
     cellClass,
+    type,
+    fullWidth,
     getValue: ( contact ) => getValueByKey( contact, key ),
   };
+}
+
+function hydrateColumn( column ) {
+  if ( !column?.key || !column?.label ) return null;
+  return createColumn( {
+    key: column.key,
+    label: column.label,
+    type: column.type || "text",
+    fullWidth: Boolean( column.fullWidth ),
+    cellClass: column.cellClass,
+  } );
+}
+
+function serializeColumns() {
+  return columns.value.map( ( column ) => {
+    const payload = {
+      key: column.key,
+      label: column.label,
+      type: column.type,
+      fullWidth: Boolean( column.fullWidth ),
+    };
+    if ( column.cellClass ) {
+      payload.cellClass = column.cellClass;
+    }
+    return payload;
+  } );
+}
+
+async function loadColumns() {
+  try {
+    const response = await fetch( "/api/columns" );
+    if ( !response.ok ) {
+      throw new Error( "Failed to load columns" );
+    }
+    const storedColumns = await response.json();
+    if ( Array.isArray( storedColumns ) && storedColumns.length ) {
+      const hydrated = storedColumns.map( ( column ) => hydrateColumn( column ) ).filter( Boolean );
+      if ( hydrated.length ) {
+        columns.value = hydrated;
+      }
+    } else {
+      await persistColumns();
+    }
+  } catch ( error ) {
+    console.error( error );
+  } finally {
+    hasLoadedColumns = true;
+  }
+}
+
+async function persistColumns() {
+  try {
+    await fetch( "/api/columns", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify( serializeColumns() ),
+    } );
+  } catch ( error ) {
+    console.error( error );
+  }
+}
+
+function schedulePersistColumns() {
+  if ( persistColumnsTimer ) {
+    clearTimeout( persistColumnsTimer );
+  }
+  persistColumnsTimer = setTimeout( () => {
+    persistColumnsTimer = null;
+    void persistColumns();
+  }, 400 );
 }
 
 function getValueByKey( contact, key ) {
@@ -576,6 +709,7 @@ function openSettingsModal() {
 
 function closeSettingsModal() {
   isSettingsOpen.value = false;
+  schedulePersistColumns();
 }
 
 function contactLabel( contact ) {
@@ -651,12 +785,25 @@ function prepareImportRows( rows ) {
     const matchingKey = guessColumnKey( key );
     return {
       importKey: key,
-      targetKey: matchingKey || "",
+      targetKey: matchingKey || ( importFieldDefault.value === "new" ? "__new__" : "" ),
       newLabel: humanizeKey( key ),
-      newKey: ensureAddressKey( normalizeColumnKey( key ) ),
+      newType: "text",
     };
   } );
   importRowTargets.value = flattenedRows.map( () => "new" );
+}
+
+function applyImportDefault( overrideAll = false ) {
+  const targetKey = importFieldDefault.value === "new" ? "__new__" : "";
+  importColumnMappings.value = importColumnMappings.value.map( ( mapping ) => {
+    if ( !overrideAll && mapping.targetKey && mapping.targetKey !== "__new__" ) {
+      return mapping;
+    }
+    return {
+      ...mapping,
+      targetKey,
+    };
+  } );
 }
 
 function flattenObject( value, prefix = "" ) {
@@ -706,13 +853,6 @@ function normalizeColumnKey( value ) {
     .replace( /^_+|_+$/g, "" );
 }
 
-function ensureAddressKey( value ) {
-  if ( !value ) return value;
-  if ( value.includes( "." ) ) return value;
-  if ( topLevelFields.has( value ) ) return value;
-  return `address.${ value }`;
-}
-
 function ensureUniqueKey( value ) {
   const existing = new Set( columns.value.map( ( column ) => column.key ) );
   let key = value || "column";
@@ -736,14 +876,19 @@ async function confirmImport() {
     return;
   }
 
+  let addedColumns = false;
   activeMappings.forEach( ( mapping ) => {
     if ( mapping.targetKey !== "__new__" ) return;
     const label = mapping.newLabel?.trim() || humanizeKey( mapping.importKey );
-    const rawKey = mapping.newKey?.trim() || normalizeColumnKey( label );
-    const uniqueKey = ensureUniqueKey( ensureAddressKey( rawKey ) );
-    columns.value = [ ...columns.value, createColumn( { key: uniqueKey, label } ) ];
+    const rawKey = normalizeColumnKey( label );
+    const uniqueKey = ensureUniqueKey( rawKey );
+    columns.value = [ ...columns.value, createColumn( { key: uniqueKey, label, type: mapping.newType || "text" } ) ];
     mapping.targetKey = uniqueKey;
+    addedColumns = true;
   } );
+  if ( addedColumns ) {
+    await persistColumns();
+  }
 
   for ( let index = 0; index < importRows.value.length; index += 1 ) {
     const target = importRowTargets.value[ index ];
@@ -761,11 +906,6 @@ async function confirmImport() {
     if ( existingContact?.id ) {
       payload.id = existingContact.id;
     }
-    if ( !existingContact && !payload.first_name && !payload.last_name ) {
-      importError.value = "Rows missing first or last name were skipped.";
-      continue;
-    }
-
     try {
       await persistContact( payload );
     } catch ( error ) {
@@ -846,6 +986,7 @@ function resetImportState() {
   importColumns.value = [];
   importColumnMappings.value = [];
   importRowTargets.value = [];
+  importFieldDefault.value = "new";
 }
 
 function exportContacts() {
@@ -903,6 +1044,38 @@ function moveColumn( index, direction ) {
   columns.value = updated;
 }
 
+function startColumnDrag( index, event ) {
+  draggingColumnIndex.value = index;
+  draggingOverIndex.value = index;
+  if ( event?.dataTransfer ) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData( "text/plain", String( index ) );
+  }
+}
+
+function handleColumnDragOver( index ) {
+  if ( draggingColumnIndex.value === null ) return;
+  draggingOverIndex.value = index;
+}
+
+function handleColumnDrop( index ) {
+  if ( draggingColumnIndex.value === null ) return;
+  const fromIndex = draggingColumnIndex.value;
+  const toIndex = index;
+  draggingColumnIndex.value = null;
+  draggingOverIndex.value = null;
+  if ( fromIndex === toIndex ) return;
+  const updated = [ ...columns.value ];
+  const [ moved ] = updated.splice( fromIndex, 1 );
+  updated.splice( toIndex, 0, moved );
+  columns.value = updated;
+}
+
+function endColumnDrag() {
+  draggingColumnIndex.value = null;
+  draggingOverIndex.value = null;
+}
+
 function removeColumn( index ) {
   const [ removed ] = columns.value.splice( index, 1 );
   if ( removed?.key === sortKey.value ) {
@@ -912,15 +1085,28 @@ function removeColumn( index ) {
 
 function addColumn() {
   const label = newColumnLabel.value.trim();
-  const baseKey = newColumnKey.value.trim() || normalizeColumnKey( label );
-  if ( !label && !baseKey ) return;
-  const key = ensureUniqueKey( ensureAddressKey( baseKey ) );
-  columns.value = [ ...columns.value, createColumn( { key, label: label || key } ) ];
+  if ( !label ) return;
+  const baseKey = normalizeColumnKey( label );
+  const key = ensureUniqueKey( baseKey );
+  columns.value = [ ...columns.value, createColumn( { key, label, type: newColumnType.value } ) ];
   newColumnLabel.value = "";
-  newColumnKey.value = "";
+  newColumnType.value = "text";
 }
 
 onMounted( () => {
-  loadContacts();
+  const initialize = async () => {
+    await loadColumns();
+    await loadContacts();
+  };
+  void initialize();
 } );
+
+watch(
+  () => columns.value,
+  () => {
+    if ( !hasLoadedColumns ) return;
+    schedulePersistColumns();
+  },
+  { deep: true }
+);
 </script>

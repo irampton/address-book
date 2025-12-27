@@ -12,23 +12,60 @@ const app = express();
 
 app.use( express.json() );
 
-const allowedSorts = new Set( [
-    "first_name",
-    "last_name",
-    "email",
-    "phone",
-    "notes",
-] );
+app.get( "/api/columns", async ( req, res ) => {
+    try {
+        const result = await pool.query( "SELECT columns FROM app_settings WHERE id = 1" );
+        const columns = result.rows[ 0 ]?.columns || [];
+        res.json( columns );
+    } catch ( error ) {
+        console.error( "Failed to load columns", error );
+        res.status( 500 ).json( { error: "Failed to load columns." } );
+    }
+} );
 
-app.get( "/api/contacts", async ( req, res ) => {
-    const sort = allowedSorts.has( req.query.sort ) ? req.query.sort : "last_name";
-    const direction = req.query.direction === "desc" ? "DESC" : "ASC";
+app.put( "/api/columns", async ( req, res ) => {
+    const payload = Array.isArray( req.body ) ? req.body : req.body?.columns;
+
+    if ( !Array.isArray( payload ) ) {
+        res.status( 400 ).json( { error: "Columns payload must be an array." } );
+        return;
+    }
+
+    const columns = payload
+        .map( ( column ) => {
+            const key = String( column?.key || "" ).trim();
+            const label = String( column?.label || "" ).trim();
+            const type = String( column?.type || "text" ).trim();
+            if ( !key || !label ) return null;
+            const sanitized = {
+                key,
+                label,
+                type,
+                fullWidth: Boolean( column?.fullWidth ),
+            };
+            if ( column?.cellClass ) {
+                sanitized.cellClass = String( column.cellClass );
+            }
+            return sanitized;
+        } )
+        .filter( Boolean );
 
     try {
-        const result = await pool.query(
-            `SELECT * FROM contacts ORDER BY ${ sort } ${ direction }, id ASC`
+        await pool.query(
+            "INSERT INTO app_settings (id, columns, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET columns = EXCLUDED.columns, updated_at = NOW()",
+            [ JSON.stringify( columns ) ]
         );
-        res.json( result.rows );
+        res.json( columns );
+    } catch ( error ) {
+        console.error( "Failed to save columns", error );
+        res.status( 500 ).json( { error: "Failed to save columns." } );
+    }
+} );
+
+app.get( "/api/contacts", async ( req, res ) => {
+    try {
+        const result = await pool.query( "SELECT id, data FROM contacts ORDER BY id ASC" );
+        res.json( result.rows.map( ( row ) => ( { id: row.id, ...row.data } ) ) );
     } catch ( error ) {
         console.error( "Failed to load contacts", error );
         res.status( 500 ).json( { error: "Failed to load contacts." } );
@@ -37,28 +74,14 @@ app.get( "/api/contacts", async ( req, res ) => {
 
 app.post( "/api/contacts", async ( req, res ) => {
     const payload = req.body || {};
-    const fields = [
-        "first_name",
-        "last_name",
-        "email",
-        "phone",
-        "address",
-        "notes",
-    ];
-    const values = fields.map( ( field ) => payload[ field ] || null );
-
-    if ( !payload.first_name && !payload.last_name ) {
-        res.status( 400 ).json( { error: "Provide at least a first or last name." } );
-        return;
-    }
+    const { id, ...data } = payload;
 
     try {
-        const placeholders = fields.map( ( _, index ) => `$${ index + 1 }` ).join( ", " );
         const result = await pool.query(
-            `INSERT INTO contacts (${ fields.join( ", " ) }) VALUES (${ placeholders }) RETURNING *`,
-            values
+            "INSERT INTO contacts (data) VALUES ($1) RETURNING id, data",
+            [ data ]
         );
-        res.status( 201 ).json( result.rows[ 0 ] );
+        res.status( 201 ).json( { id: result.rows[ 0 ].id, ...result.rows[ 0 ].data } );
     } catch ( error ) {
         console.error( "Failed to create contact", error );
         res.status( 500 ).json( { error: "Failed to create contact." } );
@@ -68,35 +91,20 @@ app.post( "/api/contacts", async ( req, res ) => {
 app.put( "/api/contacts/:id", async ( req, res ) => {
     const payload = req.body || {};
     const id = Number( req.params.id );
-    const fields = [
-        "first_name",
-        "last_name",
-        "email",
-        "phone",
-        "address",
-        "notes",
-    ];
-    const values = fields.map( ( field ) => payload[ field ] || null );
 
     if ( !id ) {
         res.status( 400 ).json( { error: "Invalid contact id." } );
         return;
     }
 
-    if ( !payload.first_name && !payload.last_name ) {
-        res.status( 400 ).json( { error: "Provide at least a first or last name." } );
-        return;
-    }
+    const { id: payloadId, ...data } = payload;
 
     try {
-        const assignments = fields
-            .map( ( field, index ) => `${ field } = $${ index + 1 }` )
-            .join( ", " );
         const result = await pool.query(
-            `UPDATE contacts SET ${ assignments } WHERE id = $${ fields.length + 1 } RETURNING *`,
-            [ ...values, id ]
+            "UPDATE contacts SET data = $1 WHERE id = $2 RETURNING id, data",
+            [ data, id ]
         );
-        res.json( result.rows[ 0 ] );
+        res.json( { id: result.rows[ 0 ].id, ...result.rows[ 0 ].data } );
     } catch ( error ) {
         console.error( "Failed to update contact", error );
         res.status( 500 ).json( { error: "Failed to update contact." } );
