@@ -37,8 +37,20 @@
           </button>
         </div>
         <div class="text-xs font-semibold text-slate-500">Contacts</div>
-        <div class="text-xs text-slate-400">
-          {{ contacts.length }}
+        <div class="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
+          <label class="relative w-full sm:w-72 md:w-96">
+            <span class="sr-only">Search contacts</span>
+            <MagnifyingGlassIcon class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              v-model="searchQuery"
+              class="w-full rounded-full border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 transition focus:border-slate-400 focus:outline-none"
+              type="search"
+              placeholder="Search all fields"
+            />
+          </label>
+          <div class="text-xs text-slate-400">
+            {{ contacts.length }}
+          </div>
         </div>
       </header>
 
@@ -348,6 +360,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   Cog6ToothIcon,
+  MagnifyingGlassIcon,
   PlusIcon,
   XMarkIcon,
 } from "@heroicons/vue/24/outline";
@@ -386,6 +399,7 @@ const exportFormat = ref( "csv" );
 const exportFileName = ref( "contacts" );
 const newColumnLabel = ref( "" );
 const newColumnKey = ref( "" );
+const searchQuery = ref( "" );
 const topLevelFields = new Set( [ "first_name", "last_name", "email", "phone", "notes", "address" ] );
 
 function createColumn( { key, label, cellClass } ) {
@@ -423,12 +437,18 @@ function setValueByKey( contact, key, value ) {
   } );
 }
 
+const filteredContacts = computed( () => {
+  const query = searchQuery.value.trim().toLowerCase();
+  if ( !query ) return contacts.value;
+  return contacts.value.filter( ( contact ) => contactMatchesQuery( contact, query ) );
+} );
+
 const sortedContacts = computed( () => {
   const direction = sortDirection.value === "asc" ? 1 : -1;
   const activeColumn = columns.value.find( ( column ) => column.key === sortKey.value );
   const getter = activeColumn?.getValue || ( ( contact ) => contact[ sortKey.value ] || "" );
 
-  return [ ...contacts.value ].sort( ( a, b ) => {
+  return [ ...filteredContacts.value ].sort( ( a, b ) => {
     const valueA = normalizeValue( getter( a ) );
     const valueB = normalizeValue( getter( b ) );
     if ( valueA < valueB ) return -1 * direction;
@@ -442,6 +462,13 @@ function normalizeValue( value ) {
     return "";
   }
   return value.toString().toLowerCase();
+}
+
+function contactMatchesQuery( contact, query ) {
+  const flattened = flattenObject( contact );
+  const values = Object.values( flattened )
+    .map( ( value ) => ( value === null || value === undefined ? "" : value.toString().toLowerCase() ) );
+  return values.some( ( value ) => value.includes( query ) );
 }
 
 function setSort( key ) {
